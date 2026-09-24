@@ -39,16 +39,26 @@ enum UiMsg {
     Done(String),
 }
 
+fn timestamp() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let t = secs % 86_400;
+    format!("{:02}:{:02}:{:02}", t / 3600, (t % 3600) / 60, t % 60)
+}
+
+fn log_line(text: String, cls: &'static str) -> UiMsg {
+    UiMsg::Line(LogLine {
+        text: format!("[{}] {text}", timestamp()),
+        cls,
+    })
+}
+
 fn format_event(ev: ProgressEvent) -> UiMsg {
     match ev {
-        ProgressEvent::Start { mode } => UiMsg::Line(LogLine {
-            text: format!("== {mode} =="),
-            cls: "",
-        }),
-        ProgressEvent::Message { text } => UiMsg::Line(LogLine {
-            text: format!(".. {text}"),
-            cls: "",
-        }),
+        ProgressEvent::Start { mode } => log_line(format!("== {mode} =="), ""),
+        ProgressEvent::Message { text } => log_line(format!(".. {text}"), ""),
         ProgressEvent::Step(s) => {
             let (cls, tag) = match s.status {
                 StepStatus::Ok => ("ok", "OK"),
@@ -56,10 +66,7 @@ fn format_event(ev: ProgressEvent) -> UiMsg {
                 StepStatus::Fail => ("fail", "FAIL"),
                 StepStatus::Skipped => ("skip", "SKIP"),
             };
-            UiMsg::Line(LogLine {
-                text: format!("[{tag}] {} — {}", s.name, s.detail),
-                cls,
-            })
+            log_line(format!("[{tag}] {} — {}", s.name, s.detail), cls)
         }
         ProgressEvent::Done { report } => UiMsg::Done(format!(
             "Done in {} ms (exit {})",
@@ -93,10 +100,8 @@ fn start_fix(
             let _ = tx.send(format_event(ev));
         };
         if dry_run {
-            let _ = tx.send(UiMsg::Line(LogLine {
-                text: ".. dry-run: no real commands will be executed".into(),
-                cls: "",
-            }));
+            let dry_line = log_line(".. dry-run: no real commands will be executed".into(), "");
+            let _ = tx.send(dry_line);
             let mut mock = MockRunner::new();
             mock.set_default(CommandOutput::ok_empty());
             let _ = run_fix_with(mode, &mock, false, &emit);
@@ -147,6 +152,7 @@ fn App() -> Element {
                     }
                 }
             }
+            running.set(false);
         }
     });
 
