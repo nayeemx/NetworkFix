@@ -1,0 +1,13 @@
+[package]
+name = "networkfix-gui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "networkfix-gui"
+path = "src/main.rs"
+
+[dependencies]
+networkfix-core = { path = "../networkfix-core" }
+dioxus = { version = "0.6", features = ["desktop"] }
