@@ -28,7 +28,12 @@ foreach ($exe in @("networkfix.exe", "networkfix-gui.exe")) {
     }
     Copy-Item -Force -Path $src -Destination $stage
 }
-Write-Host "Staged release binaries in $stage"
+$icoSrc = Join-Path $root "packaging\windows\networkfix.ico"
+if (-not (Test-Path $icoSrc)) {
+    throw "missing icon: $icoSrc"
+}
+Copy-Item -Force -Path $icoSrc -Destination $stage
+Write-Host "Staged release binaries + icon in $stage"
 
 $artifacts = @()
 
@@ -63,7 +68,7 @@ if ($candle -and $light) {
     $obj = Join-Path $wixObjDir "main.wixobj"
     $msi = Join-Path $root "dist\NetworkFix-0.1.0.msi"
 
-    & $candle.Source -nologo -arch x64 "-dStageDir=$stage" -out $obj $wxs
+    & $candle.Source -nologo -arch x64 "-dStageDir=$stage" "-dIconPath=$icoSrc" -out $obj $wxs
     if ($LASTEXITCODE -eq 0) {
         & $light.Source -nologo -out $msi $obj
         if ($LASTEXITCODE -eq 0 -and (Test-Path $msi)) {

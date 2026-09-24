@@ -13,6 +13,9 @@ networkfix-core = { path = "../networkfix-core" }
 dioxus = { version = "0.6", features = ["desktop"] }
 tokio = { version = "1", features = ["sync"] }
 
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
 [package.metadata.packager]
 product-name = "NetworkFix"
 identifier = "dev.networkfix.app"

@@ -16,6 +16,9 @@
   <?ifndef StageDir ?>
     <?define StageDir = "..\..\dist\windows\stage" ?>
   <?endif?>
+  <?ifndef IconPath ?>
+    <?define IconPath = "..\networkfix.ico" ?>
+  <?endif?>
 
   <Product Id="*"
            Name="NetworkFix"
@@ -31,11 +34,13 @@
 
     <MajorUpgrade DowngradeErrorMessage="A newer version of NetworkFix is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Icon Id="NetworkFix.ico" SourceFile="$(var.IconPath)" />
 
     <Feature Id="ProductFeature" Title="NetworkFix" Level="1" Description="NetworkFix application">
       <ComponentRef Id="CliExe" />
       <ComponentRef Id="GuiExe" />
       <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="IconFile" />
     </Feature>
 
     <Directory Id="TARGETDIR" Name="SourceDir">
@@ -54,6 +59,9 @@
           <Component Id="GuiExe" Guid="7a3f5c1e-9b2d-4e8a-b1c4-2f6d8e0a4c32" Win64="yes">
             <File Id="NetworkfixGuiExe" Source="$(var.StageDir)\networkfix-gui.exe" KeyPath="yes" />
           </Component>
+          <Component Id="IconFile" Guid="7a3f5c1e-9b2d-4e8a-b1c4-2f6d8e0a4c34" Win64="yes">
+            <File Id="NetworkfixIco" Source="$(var.StageDir)\networkfix.ico" KeyPath="yes" />
+          </Component>
         </Directory>
       </Directory>
       <Directory Id="CommonProgramMenuFolder">
@@ -63,6 +71,13 @@
                       Name="NetworkFix"
                       Description="NetworkFix GUI"
                       Target="[INSTALLDIR]networkfix-gui.exe"
+                      Icon="NetworkFix.ico"
+                      WorkingDirectory="INSTALLDIR" />
+            <Shortcut Id="CliStartMenuShortcut"
+                      Name="NetworkFix CLI"
+                      Description="NetworkFix command line"
+                      Target="[INSTALLDIR]networkfix.cmd"
+                      Icon="NetworkFix.ico"
                       WorkingDirectory="INSTALLDIR" />
             <CreateFolder />
             <RemoveFolder Id="RemoveApplicationMenuFolder" On="uninstall" />

@@ -22,14 +22,15 @@ Section "NetworkFix (GUI + CLI)" SecMain
   File "..\..\target\release\networkfix.exe"
   File "..\..\target\release\networkfix-gui.exe"
   File "networkfix.cmd"
+  File "networkfix.ico"
 
   WriteUninstaller "$INSTDIR\Uninstall.exe"
   WriteRegStr HKLM "Software\${NAME}" "InstallDir" "$INSTDIR"
 
   CreateDirectory "$SMPROGRAMS\${NAME}"
-  CreateShortCut "$SMPROGRAMS\${NAME}\NetworkFix GUI.lnk" "$INSTDIR\networkfix-gui.exe"
-  CreateShortCut "$SMPROGRAMS\${NAME}\NetworkFix CLI.lnk" "$INSTDIR\networkfix.cmd"
-  CreateShortCut "$DESKTOP\NetworkFix.lnk" "$INSTDIR\networkfix-gui.exe"
+  CreateShortCut "$SMPROGRAMS\${NAME}\NetworkFix GUI.lnk" "$INSTDIR\networkfix-gui.exe" "" "$INSTDIR\networkfix.ico" 0
+  CreateShortCut "$SMPROGRAMS\${NAME}\NetworkFix CLI.lnk" "$INSTDIR\networkfix.cmd" "" "$INSTDIR\networkfix.ico" 0
+  CreateShortCut "$DESKTOP\NetworkFix.lnk" "$INSTDIR\networkfix-gui.exe" "" "$INSTDIR\networkfix.ico" 0
 SectionEnd
 
 Section "Uninstall"
@@ -37,6 +38,7 @@ Section "Uninstall"
   Delete "$INSTDIR\networkfix.exe"
   Delete "$INSTDIR\networkfix-gui.exe"
   Delete "$INSTDIR\networkfix.cmd"
+  Delete "$INSTDIR\networkfix.ico"
   Delete "$INSTDIR\Uninstall.exe"
   Delete "$SMPROGRAMS\${NAME}\NetworkFix GUI.lnk"
   Delete "$SMPROGRAMS\${NAME}\NetworkFix CLI.lnk"
