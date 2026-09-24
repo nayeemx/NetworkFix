@@ -6,10 +6,7 @@ use crate::runner::CommandRunner;
 
 const HOTSPOT_IP: &str = "192.168.137.1";
 
-pub fn fix_no_internet(
-    runner: &dyn CommandRunner,
-    emit: &dyn Fn(ProgressEvent),
-) -> Vec<Step> {
+pub fn fix_no_internet(runner: &dyn CommandRunner, emit: &dyn Fn(ProgressEvent)) -> Vec<Step> {
     let mut steps = Vec::new();
 
     steps.extend(restart_services(runner, emit, &["SharedAccess"]));
@@ -21,7 +18,13 @@ pub fn fix_no_internet(
     );
     let mfw = runner.run(
         "netsh",
-        &["int", "ipv4", "set", "global", "multicastforwarding=enabled"],
+        &[
+            "int",
+            "ipv4",
+            "set",
+            "global",
+            "multicastforwarding=enabled",
+        ],
     );
     steps.push(match (fwd, mfw) {
         (Ok(a), Ok(b)) if a.success() && b.success() => Step::ok("ipv4 forwarding", "enabled"),
@@ -40,10 +43,7 @@ pub fn fix_no_internet(
     steps
 }
 
-fn ensure_hotspot_ip(
-    runner: &dyn CommandRunner,
-    emit: &dyn Fn(ProgressEvent),
-) -> Vec<Step> {
+fn ensure_hotspot_ip(runner: &dyn CommandRunner, emit: &dyn Fn(ProgressEvent)) -> Vec<Step> {
     emit(ProgressEvent::message("checking hotspot private IP"));
     let mut steps = Vec::new();
     let adapters = find_adapters(runner);
@@ -52,8 +52,7 @@ fn ensure_hotspot_ip(
         .filter(|a| {
             a.name.contains("Local Area Connection")
                 || a.name.contains("Wi-Fi Direct")
-                || (classify(&a.name, &a.description) == AdapterKind::Wifi
-                    && a.name.contains('*'))
+                || (classify(&a.name, &a.description) == AdapterKind::Wifi && a.name.contains('*'))
         })
         .collect();
     if targets.is_empty() {
@@ -90,7 +89,9 @@ fn ensure_hotspot_ip(
 }
 
 fn shared_access_startup(runner: &dyn CommandRunner, emit: &dyn Fn(ProgressEvent)) -> Step {
-    emit(ProgressEvent::message("setting SharedAccess startup to automatic"));
+    emit(ProgressEvent::message(
+        "setting SharedAccess startup to automatic",
+    ));
     match runner.run("sc", &["config", "SharedAccess", "start= auto"]) {
         Ok(o) if o.success() => Step::ok("SharedAccess startup", "automatic"),
         Ok(o) => Step::warn("SharedAccess startup", o.stderr.trim().to_string()),
@@ -162,8 +163,9 @@ mod tests {
                 && a.contains(&"SharedAccess".to_string())
                 && a.contains(&"start= auto".to_string())
         }));
-        assert!(steps
-            .iter()
-            .all(|s| matches!(s.status, crate::StepStatus::Ok | crate::StepStatus::Warn | crate::StepStatus::Skipped)));
+        assert!(steps.iter().all(|s| matches!(
+            s.status,
+            crate::StepStatus::Ok | crate::StepStatus::Warn | crate::StepStatus::Skipped
+        )));
     }
 }

@@ -4,7 +4,14 @@ use crate::runner::CommandRunner;
 use std::time::Duration;
 
 pub const QUICK_SERVICES: &[&str] = &[
-    "icssvc", "WlanSvc", "SharedAccess", "EapHost", "dot3svc", "RasMan", "PhoneSvc", "tapisrv",
+    "icssvc",
+    "WlanSvc",
+    "SharedAccess",
+    "EapHost",
+    "dot3svc",
+    "RasMan",
+    "PhoneSvc",
+    "tapisrv",
 ];
 
 pub fn restart_services(
@@ -33,7 +40,10 @@ pub fn restart_services(
         }
         match runner.run("sc", &["start", name]) {
             Ok(o) if o.success() => steps.push(Step::ok(*name, "restarted")),
-            Ok(o) => steps.push(Step::warn(*name, format!("start failed: {}", o.stderr.trim()))),
+            Ok(o) => steps.push(Step::warn(
+                *name,
+                format!("start failed: {}", o.stderr.trim()),
+            )),
             Err(e) => steps.push(Step::warn(*name, e)),
         }
     }
@@ -46,7 +56,11 @@ mod tests {
     use crate::runner::{CommandOutput, MockRunner};
 
     fn out(status: i32, stdout: &str) -> CommandOutput {
-        CommandOutput { status, stdout: stdout.into(), stderr: String::new() }
+        CommandOutput {
+            status,
+            stdout: stdout.into(),
+            stderr: String::new(),
+        }
     }
 
     #[test]

@@ -33,11 +33,15 @@ pub fn run_fix_with(
     #[cfg(not(any(target_os = "windows", target_os = "linux")))]
     let mut report = {
         let mut r = FixReport::new(mode, elevated);
-        r.push(Step::fail("platform", "unsupported operating system"));
+        let step = Step::fail("platform", "unsupported operating system");
+        on_event(ProgressEvent::Step(step.clone()));
+        r.push(step);
         r
     };
     report.duration_ms = started.elapsed().as_millis() as u64;
-    on_event(ProgressEvent::Done { report: report.clone() });
+    on_event(ProgressEvent::Done {
+        report: report.clone(),
+    });
     report
 }
 
@@ -58,8 +62,19 @@ mod run_fix_tests {
         let events = std::cell::RefCell::new(Vec::new());
         let report = run_fix_with(Mode::Quick, &m, true, &|e| events.borrow_mut().push(e));
         let events = events.borrow();
-        assert!(matches!(events.first(), Some(ProgressEvent::Start { mode: Mode::Quick })));
-        assert!(matches!(events.last(), Some(ProgressEvent::Done { .. })));
+        assert!(matches!(
+            events.first(),
+            Some(ProgressEvent::Start { mode: Mode::Quick })
+        ));
+        assert!(events.len() >= 2);
+        let done = events
+            .iter()
+            .find_map(|e| match e {
+                ProgressEvent::Done { report } => Some(report),
+                _ => None,
+            })
+            .expect("Done event was not emitted");
+        assert_eq!(done.duration_ms, report.duration_ms);
         assert!(report.elevated);
     }
 }

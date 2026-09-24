@@ -141,10 +141,24 @@ mod tests {
     #[test]
     fn linux_elevation_reads_id_output() {
         let mut m = MockRunner::new();
-        m.expect("id", CommandOutput { status: 0, stdout: "0\n".into(), stderr: String::new() });
+        m.expect(
+            "id",
+            CommandOutput {
+                status: 0,
+                stdout: "0\n".into(),
+                stderr: String::new(),
+            },
+        );
         assert!(elevated_from_id(&m));
         let mut m2 = MockRunner::new();
-        m2.expect("id", CommandOutput { status: 0, stdout: "1000\n".into(), stderr: String::new() });
+        m2.expect(
+            "id",
+            CommandOutput {
+                status: 0,
+                stdout: "1000\n".into(),
+                stderr: String::new(),
+            },
+        );
         assert!(!elevated_from_id(&m2));
     }
 

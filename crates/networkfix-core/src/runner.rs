@@ -14,7 +14,11 @@ impl CommandOutput {
         self.status == 0
     }
     pub fn ok_empty() -> Self {
-        Self { status: 0, stdout: String::new(), stderr: String::new() }
+        Self {
+            status: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+        }
     }
 }
 
@@ -68,9 +72,10 @@ impl Default for MockRunner {
 
 impl CommandRunner for MockRunner {
     fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, String> {
-        self.calls
-            .borrow_mut()
-            .push((program.to_string(), args.iter().map(|s| s.to_string()).collect()));
+        self.calls.borrow_mut().push((
+            program.to_string(),
+            args.iter().map(|s| s.to_string()).collect(),
+        ));
         if let Some(o) = self.scripts.get(program) {
             return Ok(o.clone());
         }
@@ -90,7 +95,14 @@ mod tests {
     #[test]
     fn mock_records_calls_and_returns_scripted_output() {
         let mut m = MockRunner::new();
-        m.expect("netsh", CommandOutput { status: 0, stdout: "ok".into(), stderr: String::new() });
+        m.expect(
+            "netsh",
+            CommandOutput {
+                status: 0,
+                stdout: "ok".into(),
+                stderr: String::new(),
+            },
+        );
         let out = m.run("netsh", &["winsock", "reset"]).unwrap();
         assert!(out.success());
         assert_eq!(m.calls.borrow().len(), 1);
@@ -106,7 +118,11 @@ mod tests {
     #[test]
     fn mock_default_covers_unscripted_programs() {
         let mut m = MockRunner::new();
-        m.set_default(CommandOutput { status: 0, stdout: String::new(), stderr: String::new() });
+        m.set_default(CommandOutput {
+            status: 0,
+            stdout: String::new(),
+            stderr: String::new(),
+        });
         assert!(m.run("anything", &[]).unwrap().success());
     }
 }

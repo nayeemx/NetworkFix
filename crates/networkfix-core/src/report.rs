@@ -19,16 +19,32 @@ pub struct Step {
 
 impl Step {
     pub fn ok(name: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self { name: name.into(), status: StepStatus::Ok, detail: detail.into() }
+        Self {
+            name: name.into(),
+            status: StepStatus::Ok,
+            detail: detail.into(),
+        }
     }
     pub fn warn(name: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self { name: name.into(), status: StepStatus::Warn, detail: detail.into() }
+        Self {
+            name: name.into(),
+            status: StepStatus::Warn,
+            detail: detail.into(),
+        }
     }
     pub fn fail(name: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self { name: name.into(), status: StepStatus::Fail, detail: detail.into() }
+        Self {
+            name: name.into(),
+            status: StepStatus::Fail,
+            detail: detail.into(),
+        }
     }
     pub fn skipped(name: impl Into<String>, detail: impl Into<String>) -> Self {
-        Self { name: name.into(), status: StepStatus::Skipped, detail: detail.into() }
+        Self {
+            name: name.into(),
+            status: StepStatus::Skipped,
+            detail: detail.into(),
+        }
     }
 }
 
@@ -42,7 +58,12 @@ pub struct FixReport {
 
 impl FixReport {
     pub fn new(mode: Mode, elevated: bool) -> Self {
-        Self { mode, steps: Vec::new(), elevated, duration_ms: 0 }
+        Self {
+            mode,
+            steps: Vec::new(),
+            elevated,
+            duration_ms: 0,
+        }
     }
 
     pub fn push(&mut self, step: Step) {

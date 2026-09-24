@@ -48,7 +48,11 @@ pub fn run_mode(
             push_step(&mut report, emit, s);
         }
         Mode::Quick | Mode::Full => {
-            push_steps(&mut report, emit, restart_services(runner, emit, QUICK_SERVICES));
+            push_steps(
+                &mut report,
+                emit,
+                restart_services(runner, emit, QUICK_SERVICES),
+            );
             let fwd = runner.run(
                 "netsh",
                 &["int", "ipv4", "set", "global", "forwarding=enabled"],
@@ -161,12 +165,7 @@ mod mode_tests {
     #[test]
     fn never_panics_on_empty_environment() {
         let m = mock();
-        for mode in [
-            Mode::Quick,
-            Mode::Full,
-            Mode::HotspotOnly,
-            Mode::NoInternet,
-        ] {
+        for mode in [Mode::Quick, Mode::Full, Mode::HotspotOnly, Mode::NoInternet] {
             let _ = run_mode(mode, &m, &|_| {}, false);
         }
         let failing = MockRunner::new();

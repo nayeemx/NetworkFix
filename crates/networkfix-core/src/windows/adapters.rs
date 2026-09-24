@@ -18,10 +18,24 @@ pub struct AdapterInfo {
 }
 
 const WWAN_TOKENS: &[&str] = &[
-    "mobile", "wwan", "fibocom", "sierra", "quectel", "broadband", "lte", "hspa", "cellular",
+    "mobile",
+    "wwan",
+    "fibocom",
+    "sierra",
+    "quectel",
+    "broadband",
+    "lte",
+    "hspa",
+    "cellular",
 ];
 const WIFI_TOKENS: &[&str] = &[
-    "wi-fi", "wifi", "wireless", "wlan", "802.11", "hosted network", "wi-fi direct",
+    "wi-fi",
+    "wifi",
+    "wireless",
+    "wlan",
+    "802.11",
+    "hosted network",
+    "wi-fi direct",
 ];
 
 fn contains_token(hay: &str, token: &str) -> bool {
@@ -115,7 +129,14 @@ pub fn renew_dhcp(runner: &dyn CommandRunner, iface: &str) -> Step {
     let name_arg = format!("name={iface}");
     let a = runner.run(
         "netsh",
-        &["interface", "ipv4", "set", "address", &name_arg, "source=dhcp"],
+        &[
+            "interface",
+            "ipv4",
+            "set",
+            "address",
+            &name_arg,
+            "source=dhcp",
+        ],
     );
     let b = runner.run(
         "netsh",
@@ -129,9 +150,7 @@ pub fn renew_dhcp(runner: &dyn CommandRunner, iface: &str) -> Step {
         ],
     );
     match (a, b) {
-        (Ok(x), Ok(y)) if x.success() && y.success() => {
-            Step::ok(format!("renew {iface}"), "dhcp")
-        }
+        (Ok(x), Ok(y)) if x.success() && y.success() => Step::ok(format!("renew {iface}"), "dhcp"),
         (Ok(x), _) if !x.success() => {
             Step::warn(format!("renew {iface}"), x.stderr.trim().to_string())
         }
@@ -150,7 +169,10 @@ mod tests {
 
     #[test]
     fn classify_matches_wwan_and_wifi() {
-        assert_eq!(classify("Cellular", "HP Mobile Broadband"), AdapterKind::Wwan);
+        assert_eq!(
+            classify("Cellular", "HP Mobile Broadband"),
+            AdapterKind::Wwan
+        );
         assert_eq!(classify("Wi-Fi", "Intel Wireless-AC"), AdapterKind::Wifi);
         assert_eq!(classify("Ethernet", "Realtek PCIe"), AdapterKind::Other);
     }
