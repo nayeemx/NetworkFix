@@ -5,3 +5,6 @@
 *.wixobj
 *.wixpdb
 !legacy/**
+/brag-output-*/
+node_modules/
+.opencode/
