@@ -13,6 +13,7 @@ pub fn fix_no_internet(
     let mut steps = Vec::new();
 
     steps.extend(restart_services(runner, emit, &["SharedAccess"]));
+    steps.push(shared_access_startup(runner, emit));
 
     let fwd = runner.run(
         "netsh",
@@ -50,6 +51,7 @@ fn ensure_hotspot_ip(
         .iter()
         .filter(|a| {
             a.name.contains("Local Area Connection")
+                || a.name.contains("Wi-Fi Direct")
                 || (classify(&a.name, &a.description) == AdapterKind::Wifi
                     && a.name.contains('*'))
         })
@@ -85,6 +87,15 @@ fn ensure_hotspot_ip(
         });
     }
     steps
+}
+
+fn shared_access_startup(runner: &dyn CommandRunner, emit: &dyn Fn(ProgressEvent)) -> Step {
+    emit(ProgressEvent::message("setting SharedAccess startup to automatic"));
+    match runner.run("sc", &["config", "SharedAccess", "start= auto"]) {
+        Ok(o) if o.success() => Step::ok("SharedAccess startup", "automatic"),
+        Ok(o) => Step::warn("SharedAccess startup", o.stderr.trim().to_string()),
+        Err(e) => Step::warn("SharedAccess startup", e),
+    }
 }
 
 fn toggle_tethering(runner: &dyn CommandRunner, emit: &dyn Fn(ProgressEvent)) -> Step {
@@ -143,6 +154,14 @@ mod tests {
         let names: Vec<&str> = steps.iter().map(|s| s.name.as_str()).collect();
         assert!(names.iter().any(|n| n.contains("SharedAccess")));
         assert!(names.iter().any(|n| n.contains("forwarding")));
+        assert!(names.iter().any(|n| n.contains("SharedAccess startup")));
+        let calls = m.calls.borrow();
+        assert!(calls.iter().any(|(p, a)| {
+            p == "sc"
+                && a.contains(&"config".to_string())
+                && a.contains(&"SharedAccess".to_string())
+                && a.contains(&"start= auto".to_string())
+        }));
         assert!(steps
             .iter()
             .all(|s| matches!(s.status, crate::StepStatus::Ok | crate::StepStatus::Warn | crate::StepStatus::Skipped)));
