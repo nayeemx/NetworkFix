@@ -1,0 +1,83 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace
+  windows-artifacts:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install NSIS and WiX
+        shell: pwsh
+        run: |
+          choco install nsis wixtoolset -y
+          $nsisDir = Get-ChildItem "${env:ProgramFiles(x86)}\NSIS" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($nsisDir) { $nsisDir.FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append }
+          $wixBin = Get-ChildItem "${env:ProgramFiles(x86)}\WiX Toolset v3.*\bin" -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($wixBin) { $wixBin.FullName | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append }
+      - name: Build release binaries
+        run: cargo build --release -p networkfix -p networkfix-gui
+      - name: Stage binaries
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist\windows\stage | Out-Null
+          Copy-Item target\release\networkfix.exe, target\release\networkfix-gui.exe dist\windows\stage\
+      - name: NSIS installer
+        run: makensis packaging/windows/networkfix.nsi
+      - name: MSI
+        shell: pwsh
+        run: |
+          $stage = (Resolve-Path dist\windows\stage).Path
+          New-Item -ItemType Directory -Force -Path dist\windows\wix | Out-Null
+          candle -nologo -arch x64 "-dStageDir=$stage" -out dist\windows\wix\main.wixobj packaging\windows\wix\main.wxs
+          if ($LASTEXITCODE -ne 0) { throw "candle failed (exit $LASTEXITCODE)" }
+          light -nologo -out dist\NetworkFix-0.1.0.msi dist\windows\wix\main.wixobj
+          if ($LASTEXITCODE -ne 0) { throw "light failed (exit $LASTEXITCODE)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: |
+            dist/*.exe
+            dist/*.msi
+  linux-artifacts:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: System deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libwebkit2gtk-4.1-dev librsvg2-bin rpm
+      - name: Build packages
+        run: bash packaging/linux/build-packages.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: dist/linux/*
+  release:
+    needs: [windows-artifacts, linux-artifacts]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            windows-installers/**
+            linux-packages/**
