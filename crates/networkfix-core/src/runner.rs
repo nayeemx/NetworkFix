@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::process::Command;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +44,7 @@ impl CommandRunner for SystemRunner {
 
 pub struct MockRunner {
     scripts: HashMap<String, CommandOutput>,
+    sequences: RefCell<HashMap<String, VecDeque<CommandOutput>>>,
     default: Option<CommandOutput>,
     pub calls: RefCell<Vec<(String, Vec<String>)>>,
 }
@@ -52,12 +53,18 @@ impl MockRunner {
     pub fn new() -> Self {
         Self {
             scripts: HashMap::new(),
+            sequences: RefCell::new(HashMap::new()),
             default: None,
             calls: RefCell::new(Vec::new()),
         }
     }
     pub fn expect(&mut self, program: &str, output: CommandOutput) {
         self.scripts.insert(program.to_string(), output);
+    }
+    pub fn expect_seq(&mut self, program: &str, outputs: Vec<CommandOutput>) {
+        self.sequences
+            .borrow_mut()
+            .insert(program.to_string(), outputs.into_iter().collect());
     }
     pub fn set_default(&mut self, output: CommandOutput) {
         self.default = Some(output);
@@ -76,6 +83,18 @@ impl CommandRunner for MockRunner {
             program.to_string(),
             args.iter().map(|s| s.to_string()).collect(),
         ));
+        {
+            let mut sequences = self.sequences.borrow_mut();
+            if let Some(queue) = sequences.get_mut(program) {
+                if queue.len() > 1 {
+                    if let Some(o) = queue.pop_front() {
+                        return Ok(o);
+                    }
+                } else if let Some(o) = queue.front() {
+                    return Ok(o.clone());
+                }
+            }
+        }
         if let Some(o) = self.scripts.get(program) {
             return Ok(o.clone());
         }
@@ -124,5 +143,57 @@ mod tests {
             stderr: String::new(),
         });
         assert!(m.run("anything", &[]).unwrap().success());
+    }
+
+    #[test]
+    fn expect_seq_returns_outputs_in_order_then_sticks_to_last() {
+        let mut m = MockRunner::new();
+        m.expect_seq(
+            "nmcli",
+            vec![
+                CommandOutput {
+                    status: 0,
+                    stdout: "first".into(),
+                    stderr: String::new(),
+                },
+                CommandOutput {
+                    status: 1,
+                    stdout: "second".into(),
+                    stderr: String::new(),
+                },
+            ],
+        );
+        assert_eq!(m.run("nmcli", &[]).unwrap().stdout, "first");
+        assert_eq!(m.run("nmcli", &[]).unwrap().stdout, "second");
+        assert_eq!(m.run("nmcli", &[]).unwrap().stdout, "second");
+        assert_eq!(m.calls.borrow().len(), 3);
+    }
+
+    #[test]
+    fn expect_seq_takes_priority_over_expect_and_default() {
+        let mut m = MockRunner::new();
+        m.expect(
+            "nmcli",
+            CommandOutput {
+                status: 0,
+                stdout: "from-expect".into(),
+                stderr: String::new(),
+            },
+        );
+        m.set_default(CommandOutput {
+            status: 0,
+            stdout: "from-default".into(),
+            stderr: String::new(),
+        });
+        m.expect_seq(
+            "nmcli",
+            vec![CommandOutput {
+                status: 0,
+                stdout: "from-seq".into(),
+                stderr: String::new(),
+            }],
+        );
+        assert_eq!(m.run("nmcli", &[]).unwrap().stdout, "from-seq");
+        assert_eq!(m.run("nmcli", &[]).unwrap().stdout, "from-seq");
     }
 }
