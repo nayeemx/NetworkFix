@@ -1,6 +1,8 @@
 use clap::{Parser, Subcommand};
 use networkfix_core::elevation::{is_elevated, relaunch_elevated, Elevation};
-use networkfix_core::{run_fix, FixReport, Mode, ProgressEvent, StepStatus};
+use networkfix_core::{
+    run_fix, run_fix_with, CommandOutput, FixReport, MockRunner, Mode, ProgressEvent, StepStatus,
+};
 use std::io::{self, BufRead, Write};
 
 #[derive(Parser)]
@@ -85,7 +87,12 @@ fn main() {
         },
     };
 
-    if !args.no_elevate && !is_elevated() {
+    let dry_run = std::env::var("NETWORKFIX_DRY_RUN")
+        .map(|v| v == "1")
+        .unwrap_or(false);
+
+    // Dry-run never relaunches/elevates: no UAC, no live commands.
+    if !dry_run && !args.no_elevate && !is_elevated() {
         eprintln!("Requesting administrator privileges...");
         let exe = std::env::current_exe().expect("current exe");
         let mut forward = vec![mode.to_string()];
@@ -104,7 +111,7 @@ fn main() {
     }
 
     let json = args.json;
-    let report = run_fix(mode, |ev| match ev {
+    let emit = |ev: ProgressEvent| match ev {
         ProgressEvent::Start { mode } => eprintln!("== mode {mode} =="),
         ProgressEvent::Message { text } => eprintln!(".. {text}"),
         ProgressEvent::Step(s) => {
@@ -117,7 +124,16 @@ fn main() {
             eprintln!("[{tag}] {} — {}", s.name, s.detail);
         }
         ProgressEvent::Done { .. } => {}
-    });
+    };
+
+    let report = if dry_run {
+        eprintln!(".. dry-run: no real commands will be executed");
+        let mut mock = MockRunner::new();
+        mock.set_default(CommandOutput::ok_empty());
+        run_fix_with(mode, &mock, false, &emit)
+    } else {
+        run_fix(mode, emit)
+    };
 
     emit_final(&report, json);
     std::process::exit(report.exit_code() as i32);

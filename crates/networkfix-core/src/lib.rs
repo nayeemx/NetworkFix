@@ -16,7 +16,7 @@ pub use elevation::{is_elevated, relaunch_elevated, Elevation};
 pub use mode::Mode;
 pub use progress::ProgressEvent;
 pub use report::{FixReport, Step, StepStatus};
-pub use runner::{CommandOutput, CommandRunner, SystemRunner};
+pub use runner::{CommandOutput, CommandRunner, MockRunner, SystemRunner};
 
 pub fn run_fix_with(
     mode: Mode,

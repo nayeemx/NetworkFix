@@ -7,6 +7,7 @@ fn bin() -> Command {
 #[test]
 fn json_quick_outputs_valid_json_on_stdout() {
     let out = bin()
+        .env("NETWORKFIX_DRY_RUN", "1")
         .args(["--json", "--no-elevate", "quick"])
         .output()
         .expect("run");
@@ -19,6 +20,11 @@ fn json_quick_outputs_valid_json_on_stdout() {
     });
     assert_eq!(v["mode"], "quick");
     assert!(v["steps"].is_array());
+    let err = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        err.contains("dry-run"),
+        "stderr should note dry-run (no live network): {err}"
+    );
 }
 
 #[test]
