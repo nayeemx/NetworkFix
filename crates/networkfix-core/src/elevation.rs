@@ -30,19 +30,51 @@ pub fn is_elevated() -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(any(windows, test))]
+fn quote_windows_arg(arg: &str) -> String {
+    let mut out = String::from("\"");
+    let mut backslashes = 0usize;
+    for c in arg.chars() {
+        match c {
+            '\\' => backslashes += 1,
+            '"' => {
+                out.push_str(&"\\".repeat(backslashes * 2 + 1));
+                out.push('"');
+                backslashes = 0;
+            }
+            other => {
+                if backslashes > 0 {
+                    out.push_str(&"\\".repeat(backslashes));
+                    backslashes = 0;
+                }
+                out.push(other);
+            }
+        }
+    }
+    out.push_str(&"\\".repeat(backslashes * 2));
+    out.push('"');
+    out
+}
+
+#[cfg(any(windows, test))]
+pub(crate) fn windows_relaunch_script(exe: &Path, args: &[String]) -> String {
+    let exe = exe.display().to_string().replace('\'', "''");
+    let mut script = format!("Start-Process -FilePath '{exe}' -Verb RunAs");
+    if !args.is_empty() {
+        let child_cmd = args
+            .iter()
+            .map(|a| quote_windows_arg(a))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let ps = child_cmd.replace('\'', "''");
+        script.push_str(&format!(" -ArgumentList '{ps}'"));
+    }
+    script
+}
+
 #[cfg(windows)]
 pub fn relaunch_elevated(current_exe: &Path, args: &[String]) -> Result<Elevation, String> {
-    let arg_list = args
-        .iter()
-        .map(|a| format!("'{}'", a.replace('\'', "''")))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let exe = current_exe.display().to_string().replace('\'', "''");
-    let script = if arg_list.is_empty() {
-        format!("Start-Process -FilePath '{exe}' -Verb RunAs")
-    } else {
-        format!("Start-Process -FilePath '{exe}' -Verb RunAs -ArgumentList {arg_list}")
-    };
+    let script = windows_relaunch_script(current_exe, args);
     let child = Command::new("powershell")
         .args(["-NoProfile", "-Command", &script])
         .stdin(Stdio::null())
@@ -120,5 +152,42 @@ mod tests {
     fn elevated_from_id_handles_runner_error() {
         let m = MockRunner::new();
         assert!(!elevated_from_id(&m));
+    }
+
+    #[cfg(any(windows, test))]
+    #[test]
+    fn windows_script_single_quotes_exe_path_with_spaces() {
+        let s = windows_relaunch_script(
+            Path::new(r"C:\Program Files\NetworkFix\networkfix.exe"),
+            &[],
+        );
+        assert!(s.contains(r"-FilePath 'C:\Program Files\NetworkFix\networkfix.exe'"));
+        assert!(s.contains("-Verb RunAs"));
+        assert!(!s.contains("-ArgumentList"));
+    }
+
+    #[cfg(any(windows, test))]
+    #[test]
+    fn windows_script_quotes_args_with_spaces_as_units() {
+        let s = windows_relaunch_script(
+            Path::new(r"C:\app\networkfix.exe"),
+            &[
+                "hello world".to_string(),
+                "--mode".to_string(),
+                "quick".to_string(),
+            ],
+        );
+        assert!(s.contains(r#"-ArgumentList '"hello world" "--mode" "quick"'"#));
+    }
+
+    #[cfg(any(windows, test))]
+    #[test]
+    fn windows_script_escapes_single_and_double_quotes() {
+        let s = windows_relaunch_script(
+            Path::new(r"C:\app's dir\app.exe"),
+            &["say \"hi\"".to_string()],
+        );
+        assert!(s.contains(r"-FilePath 'C:\app''s dir\app.exe'"));
+        assert!(s.contains(r#"-ArgumentList '"say \"hi\""'"#));
     }
 }
