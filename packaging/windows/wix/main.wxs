@@ -56,7 +56,7 @@
           </Component>
         </Directory>
       </Directory>
-      <Directory Id="ProgramMenuFolder">
+      <Directory Id="CommonProgramMenuFolder">
         <Directory Id="ApplicationMenuFolder" Name="NetworkFix">
           <Component Id="StartMenuShortcut" Guid="7a3f5c1e-9b2d-4e8a-b1c4-2f6d8e0a4c33" Win64="yes">
             <Shortcut Id="GuiStartMenuShortcut"

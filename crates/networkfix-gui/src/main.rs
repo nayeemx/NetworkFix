@@ -116,11 +116,24 @@ type FixChannel = Rc<(
     RefCell<Option<UnboundedReceiver<UiMsg>>>,
 )>;
 
+fn webview_data_dir() -> std::path::PathBuf {
+    let base = std::env::var_os("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    base.join("NetworkFix").join("WebView2")
+}
+
 fn main() {
     let window = WindowBuilder::new()
         .with_title("NetworkFix")
         .with_inner_size(LogicalSize::new(640.0, 480.0));
-    let cfg = Config::new().with_window(window);
+    let data_dir = webview_data_dir();
+    let _ = std::fs::create_dir_all(&data_dir);
+    // WebView2 cannot create its profile under Program Files (Access denied).
+    std::env::set_var("WEBVIEW2_USER_DATA_FOLDER", &data_dir);
+    let cfg = Config::new()
+        .with_window(window)
+        .with_data_directory(data_dir);
     dioxus::LaunchBuilder::desktop().with_cfg(cfg).launch(App);
 }
 
