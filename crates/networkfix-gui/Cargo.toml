@@ -12,3 +12,20 @@ path = "src/main.rs"
 networkfix-core = { path = "../networkfix-core" }
 dioxus = { version = "0.6", features = ["desktop"] }
 tokio = { version = "1", features = ["sync"] }
+
+[package.metadata.packager]
+product-name = "NetworkFix"
+identifier = "dev.networkfix.app"
+description = "Hotspot and cellular network repair"
+authors = ["NetworkFix contributors"]
+binaries = [
+    { path = "networkfix-gui", main = true },
+    { path = "networkfix", main = false },
+]
+icons = ["../../packaging/linux/icons/networkfix-256.png"]
+
+[package.metadata.packager.deb]
+package-name = "networkfix"
+section = "net"
+desktop-template = "../../packaging/linux/networkfix.desktop"
+depends = ["libwebkit2gtk-4.1-0"]

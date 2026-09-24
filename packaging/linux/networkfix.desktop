@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=NetworkFix
+Comment=Hotspot and cellular network repair
+Exec=networkfix-gui
+Icon=networkfix-gui
+Terminal=false
+Categories=Network;System;
