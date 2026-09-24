@@ -3,6 +3,8 @@ pub mod mode;
 pub mod progress;
 pub mod report;
 pub mod runner;
+#[cfg(any(target_os = "windows", test))]
+pub mod windows;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
