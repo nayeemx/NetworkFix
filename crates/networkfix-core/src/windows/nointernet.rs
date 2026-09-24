@@ -1,4 +1,4 @@
-use super::adapters::{classify, find_adapters, AdapterKind};
+use super::adapters::find_adapters;
 use super::services::restart_services;
 use crate::progress::ProgressEvent;
 use crate::report::Step;
@@ -50,9 +50,9 @@ fn ensure_hotspot_ip(runner: &dyn CommandRunner, emit: &dyn Fn(ProgressEvent)) -
     let targets: Vec<_> = adapters
         .iter()
         .filter(|a| {
-            a.name.contains("Local Area Connection")
+            a.name.contains("Local Area Connection*")
+                || a.name.contains('*')
                 || a.name.contains("Wi-Fi Direct")
-                || (classify(&a.name, &a.description) == AdapterKind::Wifi && a.name.contains('*'))
         })
         .collect();
     if targets.is_empty() {
@@ -92,7 +92,7 @@ fn shared_access_startup(runner: &dyn CommandRunner, emit: &dyn Fn(ProgressEvent
     emit(ProgressEvent::message(
         "setting SharedAccess startup to automatic",
     ));
-    match runner.run("sc", &["config", "SharedAccess", "start= auto"]) {
+    match runner.run("sc", &["config", "SharedAccess", "start=", "auto"]) {
         Ok(o) if o.success() => Step::ok("SharedAccess startup", "automatic"),
         Ok(o) => Step::warn("SharedAccess startup", o.stderr.trim().to_string()),
         Err(e) => Step::warn("SharedAccess startup", e),
@@ -161,11 +161,58 @@ mod tests {
             p == "sc"
                 && a.contains(&"config".to_string())
                 && a.contains(&"SharedAccess".to_string())
-                && a.contains(&"start= auto".to_string())
+                && a.contains(&"start=".to_string())
+                && a.contains(&"auto".to_string())
         }));
+        assert!(!calls
+            .iter()
+            .any(|(p, a)| p == "sc" && a.iter().any(|x| x.contains("start= auto"))));
         assert!(steps.iter().all(|s| matches!(
             s.status,
             crate::StepStatus::Ok | crate::StepStatus::Warn | crate::StepStatus::Skipped
         )));
+    }
+
+    fn iface_table() -> CommandOutput {
+        CommandOutput {
+            status: 0,
+            stdout: concat!(
+                "Admin State    Met     State         Name\n",
+                "-------------  ------  ------------  -------------------\n",
+                "Connected      0       Connected     Ethernet\n",
+                "Connected      0       Connected     Local Area Connection\n",
+                "Connected      0       Connected     Local Area Connection* 12\n",
+                "Connected      0       Connected     Wi-Fi Direct\n",
+            )
+            .to_string(),
+            stderr: String::new(),
+        }
+    }
+
+    #[test]
+    fn hotspot_ip_only_targets_virtual_adapters_not_bare_lac() {
+        let mut m = MockRunner::new();
+        m.expect("netsh", iface_table());
+        let _steps = ensure_hotspot_ip(&m, &|_| {});
+        let calls = m.calls.borrow();
+        let set_addrs: Vec<&Vec<String>> = calls
+            .iter()
+            .filter(|(p, a)| {
+                p == "netsh" && a.contains(&"set".to_string()) && a.contains(&"address".to_string())
+            })
+            .map(|(_, a)| a)
+            .collect();
+        assert!(set_addrs
+            .iter()
+            .any(|a| a.contains(&"name=Local Area Connection* 12".to_string())));
+        assert!(set_addrs
+            .iter()
+            .any(|a| a.contains(&"name=Wi-Fi Direct".to_string())));
+        assert!(!set_addrs
+            .iter()
+            .any(|a| a.contains(&"name=Local Area Connection".to_string())));
+        assert!(!set_addrs
+            .iter()
+            .any(|a| a.contains(&"name=Ethernet".to_string())));
     }
 }
