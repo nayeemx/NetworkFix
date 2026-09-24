@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  NetworkFix MSI (WiX v3). Installs BOTH networkfix.exe and networkfix-gui.exe.
+
+  Build (from a shell where candle/light are on PATH):
+    candle -nologo -arch x64 -dStageDir=<dir containing both exes> main.wxs -out main.wixobj
+    light  -nologo -out ..\..\dist\NetworkFix-0.1.0.msi main.wixobj
+
+  StageDir must contain networkfix.exe and networkfix-gui.exe
+  (scripts/build-windows-installers.ps1 stages them into dist/windows/stage).
+
+  Note: cargo-wix packages a single crate's binaries only, so this hand-written
+  WiX source is the authoritative MSI definition; NSIS is the primary bundler.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <?ifndef StageDir ?>
+    <?define StageDir = "..\..\dist\windows\stage" ?>
+  <?endif?>
+
+  <Product Id="*"
+           Name="NetworkFix"
+           Language="1033"
+           Version="0.1.0"
+           Manufacturer="NetworkFix Project"
+           UpgradeCode="6d2f8b4a-1c3e-4f9b-9a7d-5e2c4b8f0a13">
+    <Package InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Platform="x64"
+             Description="NetworkFix - hotspot and cellular network repair" />
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of NetworkFix is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Feature Id="ProductFeature" Title="NetworkFix" Level="1" Description="NetworkFix application">
+      <ComponentRef Id="CliExe" />
+      <ComponentRef Id="GuiExe" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="NetworkFix">
+          <Component Id="CliExe" Guid="7a3f5c1e-9b2d-4e8a-b1c4-2f6d8e0a4c31" Win64="yes">
+            <File Id="NetworkfixExe" Source="$(var.StageDir)\networkfix.exe" KeyPath="yes" />
+            <Environment Id="NetworkfixPath"
+                         Name="PATH"
+                         Value="[INSTALLDIR]"
+                         Permanent="no"
+                         Part="last"
+                         Action="set"
+                         System="yes" />
+          </Component>
+          <Component Id="GuiExe" Guid="7a3f5c1e-9b2d-4e8a-b1c4-2f6d8e0a4c32" Win64="yes">
+            <File Id="NetworkfixGuiExe" Source="$(var.StageDir)\networkfix-gui.exe" KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationMenuFolder" Name="NetworkFix">
+          <Component Id="StartMenuShortcut" Guid="7a3f5c1e-9b2d-4e8a-b1c4-2f6d8e0a4c33" Win64="yes">
+            <Shortcut Id="GuiStartMenuShortcut"
+                      Name="NetworkFix"
+                      Description="NetworkFix GUI"
+                      Target="[INSTALLDIR]networkfix-gui.exe"
+                      WorkingDirectory="INSTALLDIR" />
+            <CreateFolder />
+            <RemoveFolder Id="RemoveApplicationMenuFolder" On="uninstall" />
+            <RegistryValue Root="HKLM"
+                           Key="Software\NetworkFix"
+                           Name="StartMenuShortcut"
+                           Type="integer"
+                           Value="1"
+                           KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+  </Product>
+</Wix>
