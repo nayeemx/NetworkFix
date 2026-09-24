@@ -160,10 +160,17 @@ fn App() -> Element {
     let elev_label = if *elevated.read() { "yes" } else { "no" };
     let os = std::env::consts::OS;
     let version = networkfix_core::VERSION;
+    let dry_run = dry_run_enabled();
+    let elev_banner = if dry_run {
+        "Not elevated — dry-run mode: elevation relaunch disabled."
+    } else {
+        "Not running as administrator/root — restart elevated for full effect."
+    };
     let tx_q = channel.0.clone();
     let tx_f = channel.0.clone();
     let tx_h = channel.0.clone();
     let tx_n = channel.0.clone();
+    let tx_e = channel.0.clone();
 
     rsx! {
         style { "{CSS}" }
@@ -173,21 +180,36 @@ fn App() -> Element {
 
             if !*elevated.read() {
                 div { class: "banner",
-                    span { "Not running as administrator/root — restart elevated for full effect." }
+                    span { "{elev_banner}" }
                     button {
                         class: "elev",
-                        disabled: *running.read(),
+                        disabled: *running.read() || dry_run,
                         onclick: move |_| {
-                            match std::env::current_exe() {
-                                Ok(exe) => match relaunch_elevated(&exe, &[]) {
-                                    Ok(Elevation::RelaunchRequested) => std::process::exit(0),
-                                    Ok(_) => status.set(String::from(
-                                        "Elevation was not granted — run the app as administrator.",
-                                    )),
-                                    Err(e) => status.set(format!("Relaunch failed: {e}")),
-                                },
-                                Err(e) => status.set(format!("Cannot locate executable: {e}")),
+                            if dry_run_enabled() {
+                                status.set(String::from(
+                                    ".. dry-run: elevation relaunch skipped",
+                                ));
+                                return;
                             }
+                            let tx_e = tx_e.clone();
+                            std::thread::spawn(move || {
+                                let msg = match std::env::current_exe() {
+                                    Ok(exe) => match relaunch_elevated(&exe, &[]) {
+                                        Ok(Elevation::RelaunchRequested) => {
+                                            std::process::exit(0)
+                                        }
+                                        Ok(_) => UiMsg::Done(
+                                            "Elevation was not granted — run the app as administrator."
+                                                .into(),
+                                        ),
+                                        Err(e) => UiMsg::Done(format!("Relaunch failed: {e}")),
+                                    },
+                                    Err(e) => {
+                                        UiMsg::Done(format!("Cannot locate executable: {e}"))
+                                    }
+                                };
+                                let _ = tx_e.send(msg);
+                            });
                         },
                         "Restart elevated"
                     }

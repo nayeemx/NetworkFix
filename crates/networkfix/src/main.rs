@@ -103,8 +103,16 @@ fn main() {
             Ok(Elevation::RelaunchRequested) => {
                 std::process::exit(0);
             }
-            _ => {
-                eprintln!("error: elevation denied — re-run as admin/root or pass --no-elevate");
+            Ok(other) => {
+                eprintln!(
+                    "error: elevation denied ({other:?}) — re-run as admin/root or pass --no-elevate"
+                );
+                std::process::exit(3);
+            }
+            Err(e) => {
+                eprintln!(
+                    "error: elevation denied ({e}) — re-run as admin/root or pass --no-elevate"
+                );
                 std::process::exit(3);
             }
         }

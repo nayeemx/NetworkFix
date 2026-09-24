@@ -94,7 +94,7 @@ packaging/linux/build-packages.sh
 | OS | GUI | CLI |
 |----|-----|-----|
 | Windows 11 / 10 | yes | yes |
-| Windows 7 | no | yes |
+| Windows 7 | no | planned — smoke-test pending |
 | Debian / Ubuntu / Arch / Fedora | yes | yes |
 
 ## Modes

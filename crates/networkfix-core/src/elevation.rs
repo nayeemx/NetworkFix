@@ -59,7 +59,7 @@ fn quote_windows_arg(arg: &str) -> String {
 #[cfg(any(windows, test))]
 pub(crate) fn windows_relaunch_script(exe: &Path, args: &[String]) -> String {
     let exe = exe.display().to_string().replace('\'', "''");
-    let mut script = format!("Start-Process -FilePath '{exe}' -Verb RunAs");
+    let mut launch = format!("Start-Process -FilePath '{exe}' -Verb RunAs -Wait");
     if !args.is_empty() {
         let child_cmd = args
             .iter()
@@ -67,23 +67,30 @@ pub(crate) fn windows_relaunch_script(exe: &Path, args: &[String]) -> String {
             .collect::<Vec<_>>()
             .join(" ");
         let ps = child_cmd.replace('\'', "''");
-        script.push_str(&format!(" -ArgumentList '{ps}'"));
+        launch.push_str(&format!(" -ArgumentList '{ps}'"));
     }
-    script
+    format!("try {{ {launch} -ErrorAction Stop; exit 0 }} catch {{ exit 1 }}")
+}
+
+#[cfg(any(windows, unix, test))]
+fn elevation_from_child_exit(code: Option<i32>) -> Elevation {
+    match code {
+        Some(0) => Elevation::RelaunchRequested,
+        _ => Elevation::Denied,
+    }
 }
 
 #[cfg(windows)]
 pub fn relaunch_elevated(current_exe: &Path, args: &[String]) -> Result<Elevation, String> {
     let script = windows_relaunch_script(current_exe, args);
-    let child = Command::new("powershell")
+    let status = Command::new("powershell")
         .args(["-NoProfile", "-Command", &script])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .spawn()
+        .status()
         .map_err(|e| format!("powershell: {e}"))?;
-    drop(child);
-    Ok(Elevation::RelaunchRequested)
+    Ok(elevation_from_child_exit(status.code()))
 }
 
 #[cfg(unix)]
@@ -98,9 +105,9 @@ pub fn relaunch_elevated(current_exe: &Path, args: &[String]) -> Result<Elevatio
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .spawn()
+        .status()
     {
-        Ok(_) => return Ok(Elevation::RelaunchRequested),
+        Ok(st) => return Ok(elevation_from_child_exit(st.code())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => return Err(format!("pkexec: {e}")),
     }
@@ -113,9 +120,9 @@ pub fn relaunch_elevated(current_exe: &Path, args: &[String]) -> Result<Elevatio
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .spawn()
+        .status()
     {
-        Ok(_) => Ok(Elevation::RelaunchRequested),
+        Ok(st) => Ok(elevation_from_child_exit(st.code())),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
             Err("neither pkexec nor sudo is available; run with sudo".to_string())
         }
@@ -203,5 +210,29 @@ mod tests {
         );
         assert!(s.contains(r"-FilePath 'C:\app''s dir\app.exe'"));
         assert!(s.contains(r#"-ArgumentList '"say \"hi\""'"#));
+    }
+
+    #[cfg(any(windows, test))]
+    #[test]
+    fn windows_script_waits_and_reports_denial_via_exit_codes() {
+        let s = windows_relaunch_script(Path::new(r"C:\app\networkfix.exe"), &[]);
+        assert!(s.starts_with("try {"), "script: {s}");
+        assert!(s.contains("-Verb RunAs -Wait"), "script: {s}");
+        assert!(s.contains("-ErrorAction Stop"), "script: {s}");
+        assert!(s.contains("exit 0"), "script: {s}");
+        assert!(s.contains("exit 1"), "script: {s}");
+        assert!(s.contains("catch"), "script: {s}");
+    }
+
+    #[cfg(any(windows, unix, test))]
+    #[test]
+    fn child_exit_zero_means_completed_otherwise_denied() {
+        assert_eq!(
+            elevation_from_child_exit(Some(0)),
+            Elevation::RelaunchRequested
+        );
+        assert_eq!(elevation_from_child_exit(Some(1)), Elevation::Denied);
+        assert_eq!(elevation_from_child_exit(Some(126)), Elevation::Denied);
+        assert_eq!(elevation_from_child_exit(None), Elevation::Denied);
     }
 }

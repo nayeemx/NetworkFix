@@ -61,6 +61,23 @@ pub fn restart_nm(runner: &dyn CommandRunner) -> Step {
     }
 }
 
+fn restart_service(runner: &dyn CommandRunner, unit: &str) -> Step {
+    match runner.run("systemctl", &["restart", unit]) {
+        Ok(o) if o.success() => Step::ok(unit, "restarted"),
+        Ok(o) => Step::warn(unit, o.stderr.trim().to_string()),
+        Err(e) => Step::warn(unit, e),
+    }
+}
+
+pub fn restart_backend(runner: &dyn CommandRunner, backend: Backend) -> Step {
+    match backend {
+        Backend::NetworkManager => restart_nm(runner),
+        Backend::SystemdNetworkd => restart_service(runner, "systemd-networkd"),
+        Backend::Iwd => restart_service(runner, "iwd"),
+        Backend::None => Step::skipped("network backend", "no supported backend detected"),
+    }
+}
+
 pub fn wifi_devices(runner: &dyn CommandRunner) -> Vec<String> {
     let Ok(o) = runner.run("nmcli", &["-t", "-f", "DEVICE,TYPE,STATE", "dev", "status"]) else {
         return Vec::new();
@@ -81,18 +98,20 @@ pub fn wifi_devices(runner: &dyn CommandRunner) -> Vec<String> {
 pub fn quick_steps(
     runner: &dyn CommandRunner,
     _emit: &dyn Fn(ProgressEvent),
-    _backend: Backend,
+    backend: Backend,
 ) -> Vec<Step> {
     let mut steps = vec![];
-    steps.push(restart_nm(runner));
+    steps.push(restart_backend(runner, backend));
     steps.push(flush_dns(runner));
-    for dev in wifi_devices(runner).into_iter().take(3) {
-        let r = runner.run("nmcli", &["device", "reapply", &dev]);
-        steps.push(match r {
-            Ok(o) if o.success() => Step::ok(format!("reapply {dev}"), ""),
-            Ok(o) => Step::warn(format!("reapply {dev}"), o.stderr.trim().to_string()),
-            Err(e) => Step::warn(format!("reapply {dev}"), e),
-        });
+    if backend == Backend::NetworkManager {
+        for dev in wifi_devices(runner).into_iter().take(3) {
+            let r = runner.run("nmcli", &["device", "reapply", &dev]);
+            steps.push(match r {
+                Ok(o) if o.success() => Step::ok(format!("reapply {dev}"), ""),
+                Ok(o) => Step::warn(format!("reapply {dev}"), o.stderr.trim().to_string()),
+                Err(e) => Step::warn(format!("reapply {dev}"), e),
+            });
+        }
     }
     if steps.iter().all(|s| s.status == StepStatus::Skipped) {
         steps.push(Step::warn("quick", "no actionable network devices"));
@@ -106,11 +125,19 @@ pub fn full_steps(
     backend: Backend,
 ) -> Vec<Step> {
     let mut steps = quick_steps(runner, emit, backend);
-    for dev in wifi_devices(runner) {
-        steps.push(cycle_link(runner, &dev));
+    match backend {
+        Backend::NetworkManager => {
+            for dev in wifi_devices(runner) {
+                steps.push(cycle_link(runner, &dev));
+            }
+            steps.push(restart_wpa(runner));
+            steps.push(restart_nm(runner));
+        }
+        Backend::SystemdNetworkd | Backend::Iwd => {
+            steps.push(restart_backend(runner, backend));
+        }
+        Backend::None => {}
     }
-    steps.push(restart_wpa(runner));
-    steps.push(restart_nm(runner));
     steps
 }
 
@@ -134,41 +161,50 @@ fn restart_wpa(runner: &dyn CommandRunner) -> Step {
 pub fn hotspot_only_steps(
     runner: &dyn CommandRunner,
     _emit: &dyn Fn(ProgressEvent),
-    _backend: Backend,
+    backend: Backend,
 ) -> Vec<Step> {
     let mut steps = vec![];
-    let con = runner.run("nmcli", &["-t", "-f", "NAME,TYPE", "con", "show"]);
-    let hotspot_name = con.ok().and_then(|o| {
-        o.stdout.lines().find_map(|l| {
-            let mut it = l.splitn(2, ':');
-            let name = it.next()?.to_string();
-            let ty = it.next().unwrap_or("");
-            if ty.contains("802-11-ap") || name.to_ascii_lowercase().contains("hotspot") {
-                Some(name)
-            } else {
-                None
-            }
-        })
-    });
-    match hotspot_name {
-        Some(name) => {
-            let _ = runner.run("nmcli", &["con", "down", &name]);
-            std::thread::sleep(Duration::from_secs(1));
-            match runner.run("nmcli", &["con", "up", &name]) {
-                Ok(o) if o.success() => {
-                    steps.push(Step::ok(format!("hotspot {name}"), "restarted"))
+    match backend {
+        Backend::NetworkManager => {
+            let con = runner.run("nmcli", &["-t", "-f", "NAME,TYPE", "con", "show"]);
+            let hotspot_name = con.ok().and_then(|o| {
+                o.stdout.lines().find_map(|l| {
+                    let mut it = l.splitn(2, ':');
+                    let name = it.next()?.to_string();
+                    let ty = it.next().unwrap_or("");
+                    if ty.contains("802-11-ap") || name.to_ascii_lowercase().contains("hotspot") {
+                        Some(name)
+                    } else {
+                        None
+                    }
+                })
+            });
+            match hotspot_name {
+                Some(name) => {
+                    let _ = runner.run("nmcli", &["con", "down", &name]);
+                    std::thread::sleep(Duration::from_secs(1));
+                    match runner.run("nmcli", &["con", "up", &name]) {
+                        Ok(o) if o.success() => {
+                            steps.push(Step::ok(format!("hotspot {name}"), "restarted"))
+                        }
+                        Ok(o) => steps.push(Step::warn(
+                            format!("hotspot {name}"),
+                            o.stderr.trim().to_string(),
+                        )),
+                        Err(e) => steps.push(Step::warn(format!("hotspot {name}"), e)),
+                    }
                 }
-                Ok(o) => steps.push(Step::warn(
-                    format!("hotspot {name}"),
-                    o.stderr.trim().to_string(),
+                None => steps.push(Step::skipped(
+                    "hotspot",
+                    "no AP/hotspot profile found — turn hotspot on first",
                 )),
-                Err(e) => steps.push(Step::warn(format!("hotspot {name}"), e)),
             }
         }
-        None => steps.push(Step::skipped(
+        Backend::SystemdNetworkd | Backend::Iwd => steps.push(Step::skipped(
             "hotspot",
-            "no AP/hotspot profile found — turn hotspot on first",
+            "configure hotspot via networkd/iwd manually",
         )),
+        Backend::None => steps.push(Step::skipped("hotspot", "no supported backend detected")),
     }
     steps.push(flush_dns(runner));
     steps
@@ -177,7 +213,7 @@ pub fn hotspot_only_steps(
 pub fn no_internet_steps(
     runner: &dyn CommandRunner,
     emit: &dyn Fn(ProgressEvent),
-    _backend: Backend,
+    backend: Backend,
 ) -> Vec<Step> {
     let mut steps = Vec::new();
     emit(ProgressEvent::message("enabling ip forwarding"));
@@ -194,10 +230,18 @@ pub fn no_internet_steps(
         None => steps.push(Step::warn("nat", "no default route found")),
     }
 
-    steps.push(restart_nm(runner));
+    steps.push(restart_backend(runner, backend));
+    steps.push(restart_dnsmasq(runner));
     steps.push(flush_dns(runner));
     steps.push(report_hotspot_addrs(runner));
     steps
+}
+
+fn restart_dnsmasq(runner: &dyn CommandRunner) -> Step {
+    match runner.run("systemctl", &["restart", "dnsmasq"]) {
+        Ok(o) if o.success() => Step::ok("dnsmasq", "restarted"),
+        _ => Step::skipped("dnsmasq", "not installed"),
+    }
 }
 
 fn sysctl_set(runner: &dyn CommandRunner, key: &str, val: &str) -> Step {
@@ -296,6 +340,8 @@ fn report_hotspot_addrs(runner: &dyn CommandRunner) -> Step {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::linux::run_mode;
+    use crate::mode::Mode;
     use crate::runner::{CommandOutput, MockRunner};
 
     #[test]
@@ -332,5 +378,144 @@ mod tests {
         assert!(calls
             .iter()
             .any(|(p, a)| p == "iptables" && a.iter().any(|x| x.contains("MASQUERADE"))));
+    }
+
+    #[test]
+    fn quick_networkd_restarts_networkd_and_skips_nmcli() {
+        let mut m = MockRunner::new();
+        m.set_default(CommandOutput::ok_empty());
+        let steps = quick_steps(&m, &|_| {}, Backend::SystemdNetworkd);
+        assert!(steps
+            .iter()
+            .any(|s| s.name == "systemd-networkd" && s.status == StepStatus::Ok));
+        assert!(steps.iter().any(|s| s.name == "flush dns"));
+        let calls = m.calls.borrow();
+        assert!(!calls.iter().any(|(p, _)| p == "nmcli"));
+        assert!(calls
+            .iter()
+            .any(|(p, a)| p == "systemctl" && a.contains(&"systemd-networkd".to_string())));
+    }
+
+    #[test]
+    fn quick_iwd_restarts_iwd_and_skips_nmcli() {
+        let mut m = MockRunner::new();
+        m.set_default(CommandOutput::ok_empty());
+        let steps = quick_steps(&m, &|_| {}, Backend::Iwd);
+        assert!(steps
+            .iter()
+            .any(|s| s.name == "iwd" && s.status == StepStatus::Ok));
+        assert!(steps.iter().any(|s| s.name == "flush dns"));
+        let calls = m.calls.borrow();
+        assert!(!calls.iter().any(|(p, _)| p == "nmcli"));
+        assert!(calls
+            .iter()
+            .any(|(p, a)| p == "systemctl" && a.contains(&"iwd".to_string())));
+    }
+
+    #[test]
+    fn full_networkd_never_calls_nmcli() {
+        let mut m = MockRunner::new();
+        m.set_default(CommandOutput::ok_empty());
+        let steps = full_steps(&m, &|_| {}, Backend::SystemdNetworkd);
+        assert!(!m.calls.borrow().iter().any(|(p, _)| p == "nmcli"));
+        assert!(steps
+            .iter()
+            .any(|s| s.name == "systemd-networkd" && s.status == StepStatus::Ok));
+    }
+
+    #[test]
+    fn hotspot_networkd_skips_with_manual_hint() {
+        let m = MockRunner::new();
+        let steps = hotspot_only_steps(&m, &|_| {}, Backend::SystemdNetworkd);
+        let hs = steps
+            .iter()
+            .find(|s| s.name == "hotspot")
+            .expect("hotspot step");
+        assert_eq!(hs.status, StepStatus::Skipped);
+        assert!(hs.detail.contains("networkd/iwd"));
+        assert!(!m.calls.borrow().iter().any(|(p, _)| p == "nmcli"));
+    }
+
+    #[test]
+    fn hotspot_iwd_skips_with_manual_hint() {
+        let m = MockRunner::new();
+        let steps = hotspot_only_steps(&m, &|_| {}, Backend::Iwd);
+        let hs = steps
+            .iter()
+            .find(|s| s.name == "hotspot")
+            .expect("hotspot step");
+        assert_eq!(hs.status, StepStatus::Skipped);
+        assert!(hs.detail.contains("networkd/iwd"));
+    }
+
+    #[test]
+    fn no_internet_restarts_dnsmasq_when_present() {
+        let mut m = MockRunner::new();
+        m.set_default(CommandOutput::ok_empty());
+        let steps = no_internet_steps(&m, &|_| {}, Backend::NetworkManager);
+        let d = steps
+            .iter()
+            .find(|s| s.name == "dnsmasq")
+            .expect("dnsmasq step");
+        assert_eq!(d.status, StepStatus::Ok);
+        assert!(m
+            .calls
+            .borrow()
+            .iter()
+            .any(|(p, a)| p == "systemctl" && a.contains(&"dnsmasq".to_string())));
+    }
+
+    #[test]
+    fn no_internet_dnsmasq_skipped_when_unavailable() {
+        let mut m = MockRunner::new();
+        m.set_default(CommandOutput {
+            status: 1,
+            stdout: String::new(),
+            stderr: "not found".into(),
+        });
+        let steps = no_internet_steps(&m, &|_| {}, Backend::NetworkManager);
+        let d = steps
+            .iter()
+            .find(|s| s.name == "dnsmasq")
+            .expect("dnsmasq step");
+        assert_eq!(d.status, StepStatus::Skipped);
+        assert!(d.detail.contains("not installed"));
+    }
+
+    #[test]
+    fn run_mode_quick_networkd_detects_and_restarts_networkd() {
+        let mut m = MockRunner::new();
+        m.expect(
+            "nmcli",
+            CommandOutput {
+                status: 1,
+                stdout: String::new(),
+                stderr: "NetworkManager is not running".into(),
+            },
+        );
+        m.expect_seq(
+            "systemctl",
+            vec![
+                CommandOutput {
+                    status: 1,
+                    stdout: String::new(),
+                    stderr: "inactive".into(),
+                },
+                CommandOutput::ok_empty(),
+            ],
+        );
+        m.expect("networkctl", CommandOutput::ok_empty());
+        m.set_default(CommandOutput::ok_empty());
+        let report = run_mode(Mode::Quick, &m, &|_| {}, true);
+        assert!(report
+            .steps
+            .iter()
+            .any(|s| s.name == "systemd-networkd" && s.status == StepStatus::Ok));
+        assert!(report.steps.iter().any(|s| s.name == "flush dns"));
+        assert!(!m
+            .calls
+            .borrow()
+            .iter()
+            .any(|(p, a)| { p == "nmcli" && a.first().map(String::as_str) == Some("device") }));
     }
 }
