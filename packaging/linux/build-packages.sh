@@ -52,10 +52,12 @@ NetworkFix repairs hotspot and cellular network connectivity issues.
 mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/usr/share/applications
 mkdir -p %{buildroot}/usr/share/icons/hicolor/256x256/apps
-install -m 755 target/release/networkfix %{buildroot}/usr/bin/networkfix
-install -m 755 target/release/networkfix-gui %{buildroot}/usr/bin/networkfix-gui
-install -m 644 packaging/linux/networkfix.desktop %{buildroot}/usr/share/applications/networkfix-gui.desktop
-install -m 644 packaging/linux/icons/networkfix-256.png %{buildroot}/usr/share/icons/hicolor/256x256/apps/networkfix-gui.png
+install -m 755 "$repo_root/target/release/networkfix" %{buildroot}/usr/bin/networkfix
+install -m 755 "$repo_root/target/release/networkfix-gui" %{buildroot}/usr/bin/networkfix-gui
+sed -e 's/{{exec}}/networkfix-gui/g' -e 's/{{icon}}/networkfix-gui/g' \
+  "$repo_root/packaging/linux/networkfix.desktop" > %{_topdir}/networkfix-gui.desktop
+install -m 644 %{_topdir}/networkfix-gui.desktop %{buildroot}/usr/share/applications/networkfix-gui.desktop
+install -m 644 "$repo_root/packaging/linux/icons/networkfix-256.png" %{buildroot}/usr/share/icons/hicolor/256x256/apps/networkfix-gui.png
 
 %files
 /usr/bin/networkfix
@@ -65,6 +67,8 @@ install -m 644 packaging/linux/icons/networkfix-256.png %{buildroot}/usr/share/i
 EOF
 
   rpmbuild -bb --define "_topdir $rpm_top" "$rpm_top/SPECS/networkfix.spec"
+  mkdir -p dist/linux
+  find "$rpm_top/RPMS" -type f -name '*.rpm' -exec cp -f {} dist/linux/ \;
   rm -rf "$rpm_top"
 else
   echo "warning: rpmbuild not found; skipping .rpm (apt install rpm)" >&2

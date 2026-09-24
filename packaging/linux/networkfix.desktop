@@ -2,7 +2,7 @@
 Type=Application
 Name=NetworkFix
 Comment=Hotspot and cellular network repair
-Exec=networkfix-gui
-Icon=networkfix-gui
+Exec={{exec}}
+Icon={{icon}}
 Terminal=false
 Categories=Network;System;
