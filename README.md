@@ -11,7 +11,7 @@ Run one of the release installers:
 - **NSIS:** `NetworkFix-0.1.0-Setup.exe`
 - **MSI:** `NetworkFix-0.1.0.msi`
 
-Both install `networkfix.exe` (CLI) and `networkfix-gui.exe` (GUI) with Start Menu shortcuts. The GUI needs WebView2 (preinstalled on most Windows 10/11 systems).
+Both install `networkfix.exe` (CLI) and `networkfix-gui.exe` (GUI). NSIS adds Start Menu shortcuts for GUI and CLI; MSI adds a GUI Start Menu shortcut and puts the install dir (CLI) on PATH. The GUI needs WebView2 (preinstalled on most Windows 10/11 systems).
 
 ### Debian / Ubuntu
 
@@ -22,14 +22,14 @@ sudo apt install ./networkfix_0.1.0_amd64.deb
 ### Fedora
 
 ```bash
-sudo rpm -i networkfix-0.1.0.x86_64.rpm
+sudo rpm -i networkfix-0.1.0-*.x86_64.rpm
 ```
 
 ### Any Linux (AppImage)
 
 ```bash
-chmod +x networkfix-*.AppImage
-./networkfix-*.AppImage
+chmod +x *.AppImage
+./networkfix_0.1.0_amd64.AppImage   # exact name: ls *.AppImage
 ```
 
 ## CLI usage
@@ -45,6 +45,8 @@ networkfix --version
 
 - `--json` prints only JSON on stdout; progress lines go to stderr (safe for scripting).
 - `--no-elevate` skips the UAC/pkexec relaunch (steps may warn without admin).
+
+GUI screenshot: (placeholder — add after first release)
 
 ### Exit codes
 
