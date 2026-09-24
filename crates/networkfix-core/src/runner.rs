@@ -26,14 +26,26 @@ pub trait CommandRunner {
     fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, String>;
 }
 
+/// Hide the child console window on Windows so GUI/host apps never flash
+/// a terminal. No-op on other platforms.
+#[cfg(windows)]
+pub fn hide_console_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+pub fn hide_console_window(_cmd: &mut Command) {}
+
 pub struct SystemRunner;
 
 impl CommandRunner for SystemRunner {
     fn run(&self, program: &str, args: &[&str]) -> Result<CommandOutput, String> {
-        let out = Command::new(program)
-            .args(args)
-            .output()
-            .map_err(|e| format!("{program}: {e}"))?;
+        let mut cmd = Command::new(program);
+        cmd.args(args);
+        hide_console_window(&mut cmd);
+        let out = cmd.output().map_err(|e| format!("{program}: {e}"))?;
         Ok(CommandOutput {
             status: out.status.code().unwrap_or(-1),
             stdout: String::from_utf8_lossy(&out.stdout).into_owned(),

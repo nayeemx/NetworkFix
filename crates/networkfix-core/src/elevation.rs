@@ -1,4 +1,4 @@
-use crate::runner::{CommandRunner, SystemRunner};
+use crate::runner::{hide_console_window, CommandRunner, SystemRunner};
 use std::path::Path;
 use std::process::{Command, Stdio};
 
@@ -83,13 +83,13 @@ fn elevation_from_child_exit(code: Option<i32>) -> Elevation {
 #[cfg(windows)]
 pub fn relaunch_elevated(current_exe: &Path, args: &[String]) -> Result<Elevation, String> {
     let script = windows_relaunch_script(current_exe, args);
-    let status = Command::new("powershell")
-        .args(["-NoProfile", "-Command", &script])
+    let mut cmd = Command::new("powershell");
+    cmd.args(["-NoProfile", "-Command", &script])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|e| format!("powershell: {e}"))?;
+        .stderr(Stdio::null());
+    hide_console_window(&mut cmd);
+    let status = cmd.status().map_err(|e| format!("powershell: {e}"))?;
     Ok(elevation_from_child_exit(status.code()))
 }
 

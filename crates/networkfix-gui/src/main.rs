@@ -1,3 +1,6 @@
+// GUI must not allocate/show a console on Windows (professional desktop app).
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use dioxus::desktop::{Config, LogicalSize, WindowBuilder};
 use dioxus::prelude::*;
 use networkfix_core::elevation::{is_elevated, relaunch_elevated, Elevation};
